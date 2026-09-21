@@ -27,17 +27,18 @@
 
 ## 📁 프로젝트 구조
 
+```
 saju-project/
-├── main.py # FastAPI 앱, 라우터
-├── saju.py # 사주 계산 로직
-├── database.py # DB 연결 설정
-├── models.py # DB 테이블 모델
+├── main.py              # FastAPI 앱, 라우터
+├── saju.py               # 사주 계산 로직
+├── database.py            # DB 연결 설정
+├── models.py              # DB 테이블 모델
 ├── requirements.txt
-└── saju-frontend/ # React 프론트엔드
-├── src/
-│ ├── App.jsx
-│ └── ...
-└── package.json
+└── saju-frontend/          # React 프론트엔드
+    ├── src/
+    │   └── App.jsx
+    └── package.json
+```
 
 ## 🚀 실행 방법
 
