@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from saju import calculate_saju
+from oheng import analyze_oheng
+from interpretation import generate_interpretation
 from database import Base, engine, get_db
 from models import SajuQuery
 
@@ -49,16 +51,29 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"유효하지 않은 날짜입니다: {e}")
 
+    # 오행 분포 계산과 Claude 해석 생성은 사주 계산과 분리된 함수로 각각 처리
+    oheng_analysis = analyze_oheng(result)
+    try:
+        interpretation = generate_interpretation(result, oheng_analysis)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"운세 해석 생성에 실패했습니다: {e}")
+
+    response = {
+        **result,
+        "oheng_analysis": oheng_analysis,
+        "interpretation": interpretation,
+    }
+
     query_record = SajuQuery(
         year=request.year, month=request.month, day=request.day,
         hour=request.hour, minute=request.minute, longitude=request.longitude,
-        result=result,
+        result=response,
     )
     db.add(query_record)
     db.commit()
     db.refresh(query_record)
 
-    return result
+    return response
 
 
 @app.get("/history")

@@ -4,6 +4,15 @@ import { useState, useEffect } from 'react'
 
 const API_BASE = 'http://54.116.89.93:8000'
 
+// 오행별 배지 색상 (다크 테마 위에서 구분이 잘 되도록 선정)
+const OHENG_COLORS = {
+  목: 'bg-emerald-500',
+  화: 'bg-red-500',
+  토: 'bg-amber-500',
+  금: 'bg-slate-400',
+  수: 'bg-sky-500',
+}
+
 function App() {
   const [year, setYear] = useState('')
   const [month, setMonth] = useState('')
@@ -134,7 +143,7 @@ function App() {
             disabled={loading}
             className="w-full bg-amber-400 hover:bg-amber-300 disabled:bg-slate-600 disabled:cursor-not-allowed text-slate-900 font-semibold rounded-lg py-3 transition-colors"
           >
-            {loading ? '계산 중...' : '사주 보기'}
+            {loading ? '해석 생성 중...' : '사주 보기'}
           </button>
         </form>
 
@@ -161,6 +170,41 @@ function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {result?.oheng_analysis && (
+          <div className="mt-6 bg-slate-800 rounded-2xl p-6 shadow-lg">
+            <h2 className="text-lg font-semibold mb-4 text-amber-400">오행 분포</h2>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(result.oheng_analysis.distribution).map(([element, count]) => (
+                <span
+                  key={element}
+                  className={`${OHENG_COLORS[element]} text-slate-900 text-sm font-semibold rounded-full px-3 py-1`}
+                >
+                  {element} {count}
+                </span>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-slate-400">
+              일간: <span className="text-slate-200 font-medium">{result.oheng_analysis.day_master.hanja}</span>
+              {' '}({result.oheng_analysis.day_master.element})
+            </p>
+          </div>
+        )}
+
+        {result?.interpretation && (
+          <div className="mt-6 space-y-4">
+            {[
+              { label: '종합운', text: result.interpretation.overall },
+              { label: '연애운', text: result.interpretation.love },
+              { label: '금전운', text: result.interpretation.money },
+            ].map((item) => (
+              <div key={item.label} className="bg-slate-800 rounded-2xl p-6 shadow-lg">
+                <h2 className="text-lg font-semibold mb-2 text-amber-400">{item.label}</h2>
+                <p className="text-slate-300 leading-relaxed">{item.text}</p>
+              </div>
+            ))}
           </div>
         )}
 
