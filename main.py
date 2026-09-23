@@ -10,7 +10,10 @@ from sqlalchemy import desc
 
 from saju import calculate_saju
 from oheng import analyze_oheng
-from interpretation import generate_interpretation
+from sipsin import analyze_sipsin
+from family import build_family_analysis
+from interpretation import generate_interpretation, generate_celebrity_comparison
+from matching import find_celebrity_matches
 from database import Base, engine, get_db
 from models import SajuQuery
 
@@ -51,8 +54,10 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"유효하지 않은 날짜입니다: {e}")
 
-    # 오행 분포 계산과 Claude 해석 생성은 사주 계산과 분리된 함수로 각각 처리
+    # 오행/십신/가족관계 계산과 Claude 해석 생성은 사주 계산과 분리된 함수로 각각 처리
     oheng_analysis = analyze_oheng(result)
+    sipsin_analysis = analyze_sipsin(result)
+    family_analysis = build_family_analysis(result, sipsin_analysis)
     try:
         interpretation = generate_interpretation(result, oheng_analysis)
     except Exception as e:
@@ -61,6 +66,8 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     response = {
         **result,
         "oheng_analysis": oheng_analysis,
+        "sipsin_analysis": sipsin_analysis,
+        "family_analysis": family_analysis,
         "interpretation": interpretation,
     }
 
@@ -74,6 +81,41 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     db.refresh(query_record)
 
     return response
+
+
+@app.post("/saju/celebrity-match")
+def get_celebrity_match(request: SajuRequest):
+    """사용자 사주와 닮은 유명인을 찾아 비교 해석과 함께 반환. Claude 호출이 여러 번 발생할 수 있어 /saju와 분리된 엔드포인트로 구성"""
+    try:
+        result = calculate_saju(
+            year=request.year, month=request.month, day=request.day,
+            hour=request.hour, minute=request.minute, longitude=request.longitude,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"유효하지 않은 날짜입니다: {e}")
+
+    oheng_analysis = analyze_oheng(result)
+    matches = find_celebrity_matches(result, oheng_analysis)
+
+    matched = []
+    for m in matches:
+        celeb = m["celebrity"]
+        try:
+            comparison = generate_celebrity_comparison(result, oheng_analysis, celeb)
+        except Exception:
+            # 비교 문장 생성 실패는 매칭 결과 자체를 막지 않고 문구만 비워둠
+            comparison = None
+
+        matched.append({
+            "name": celeb["name"],
+            "category": celeb["category"],
+            "bio": celeb["bio"],
+            "traits": celeb["traits"],
+            "match_reason": m["match_reason"],
+            "comparison": comparison,
+        })
+
+    return {"matches": matched}
 
 
 @app.get("/history")
