@@ -1,6 +1,6 @@
 # main.py
 
-from datetime import datetime
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,12 +8,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from saju import calculate_saju
+from saju import calculate_saju, convert_lunar_to_solar
 from oheng import analyze_oheng
 from sipsin import analyze_sipsin
 from family import build_family_analysis
 from interpretation import generate_interpretation, generate_celebrity_comparison
 from matching import find_celebrity_matches
+from cities import CITY_LONGITUDE, DEFAULT_LONGITUDE
 from database import Base, engine, get_db
 from models import SajuQuery
 
@@ -41,15 +42,39 @@ class SajuRequest(BaseModel):
     day: int = Field(..., ge=1, le=31)
     hour: int = Field(..., ge=0, le=23)
     minute: int = Field(0, ge=0, le=59)
-    longitude: float = Field(126.9784)
+    gender: Literal["남성", "여성"]
+    calendar_type: Literal["solar", "lunar"] = "solar"
+    is_leap_month: bool = False  # calendar_type이 lunar일 때만 의미 있음
+    birth_city: str | None = None  # CITY_LONGITUDE에 등록된 도시명 (진태양시 보정용)
+    longitude: float | None = None  # 직접 입력한 경도. 지정 시 birth_city보다 우선
+
+
+def _resolve_solar_birth(request: SajuRequest) -> tuple[int, int, int, float]:
+    """요청에서 실제 사주 계산에 쓸 양력 생년월일과 경도를 확정 (음력 변환 + 도시->경도 매핑)"""
+    if request.calendar_type == "lunar":
+        year, month, day = convert_lunar_to_solar(request.year, request.month, request.day, request.is_leap_month)
+    else:
+        year, month, day = request.year, request.month, request.day
+
+    if request.longitude is not None:
+        longitude = request.longitude
+    elif request.birth_city:
+        if request.birth_city not in CITY_LONGITUDE:
+            raise HTTPException(status_code=400, detail=f"등록되지 않은 도시입니다: {request.birth_city}")
+        longitude = CITY_LONGITUDE[request.birth_city]
+    else:
+        longitude = DEFAULT_LONGITUDE
+
+    return year, month, day, longitude
 
 
 @app.post("/saju")
 def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
+    year, month, day, longitude = _resolve_solar_birth(request)
     try:
         result = calculate_saju(
-            year=request.year, month=request.month, day=request.day,
-            hour=request.hour, minute=request.minute, longitude=request.longitude,
+            year=year, month=month, day=day,
+            hour=request.hour, minute=request.minute, longitude=longitude,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"유효하지 않은 날짜입니다: {e}")
@@ -57,23 +82,27 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     # 오행/십신/가족관계 계산과 Claude 해석 생성은 사주 계산과 분리된 함수로 각각 처리
     oheng_analysis = analyze_oheng(result)
     sipsin_analysis = analyze_sipsin(result)
-    family_analysis = build_family_analysis(result, sipsin_analysis)
+    family_analysis = build_family_analysis(result, sipsin_analysis, request.gender)
     try:
-        interpretation = generate_interpretation(result, oheng_analysis)
+        interpretation = generate_interpretation(result, oheng_analysis, request.gender)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"운세 해석 생성에 실패했습니다: {e}")
 
     response = {
         **result,
+        "gender": request.gender,
+        "calendar_type": request.calendar_type,
+        "birth_city": request.birth_city,
         "oheng_analysis": oheng_analysis,
         "sipsin_analysis": sipsin_analysis,
         "family_analysis": family_analysis,
         "interpretation": interpretation,
     }
 
+    # DB 컬럼은 실제 계산에 쓰인 양력 날짜를 저장 (성별/음양력/도시 등 부가정보는 result JSON에 포함)
     query_record = SajuQuery(
-        year=request.year, month=request.month, day=request.day,
-        hour=request.hour, minute=request.minute, longitude=request.longitude,
+        year=year, month=month, day=day,
+        hour=request.hour, minute=request.minute, longitude=longitude,
         result=response,
     )
     db.add(query_record)
@@ -86,10 +115,11 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
 @app.post("/saju/celebrity-match")
 def get_celebrity_match(request: SajuRequest):
     """사용자 사주와 닮은 유명인을 찾아 비교 해석과 함께 반환. Claude 호출이 여러 번 발생할 수 있어 /saju와 분리된 엔드포인트로 구성"""
+    year, month, day, longitude = _resolve_solar_birth(request)
     try:
         result = calculate_saju(
-            year=request.year, month=request.month, day=request.day,
-            hour=request.hour, minute=request.minute, longitude=request.longitude,
+            year=year, month=month, day=day,
+            hour=request.hour, minute=request.minute, longitude=longitude,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"유효하지 않은 날짜입니다: {e}")

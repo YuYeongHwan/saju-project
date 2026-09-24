@@ -27,7 +27,7 @@ _JSON_SYSTEM_PROMPT = _PERSONA_PROMPT + " 다른 설명이나 인사말 없이 J
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
-def _build_prompt(saju_result: dict, oheng_data: dict) -> str:
+def _build_prompt(saju_result: dict, oheng_data: dict, gender: str = "남성") -> str:
     """4기둥 정보와 오행 분포를 Claude에게 전달할 프롬프트 텍스트로 조립"""
     pillars = (
         f"연주 {saju_result['year_pillar']['hanja']}({saju_result['year_pillar']['hangul']}), "
@@ -43,9 +43,11 @@ def _build_prompt(saju_result: dict, oheng_data: dict) -> str:
         "아래 사주 정보를 바탕으로 운세를 해석해주세요.\n\n"
         f"- 사주 4기둥: {pillars}\n"
         f"- 오행 분포: {oheng_text}\n"
-        f"- 일간(본인을 상징하는 글자): {day_master['hanja']} ({day_master['element']})\n\n"
+        f"- 일간(본인을 상징하는 글자): {day_master['hanja']} ({day_master['element']})\n"
+        f"- 성별: {gender}\n\n"
         "다음 5가지 항목을 각각 3~4문장으로 해석한 뒤, "
-        "아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):\n"
+        "아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이). "
+        "특히 love 항목은 배우자/연인 관련 표현을 사용자의 성별에 자연스럽게 맞춰 작성하세요:\n"
         '{"overall": "종합운 해석", "personality": "성격 해석", "career": "직업운 해석", '
         '"love": "연애운 해석", "money": "금전운 해석"}'
     )
@@ -71,12 +73,12 @@ def _call_claude_json(prompt: str, max_tokens: int = 1024) -> dict:
         raise ValueError(f"Claude 응답을 JSON으로 파싱하지 못했습니다: {raw_text}") from e
 
 
-def generate_interpretation(saju_result: dict, oheng_data: dict) -> dict:
+def generate_interpretation(saju_result: dict, oheng_data: dict, gender: str = "남성") -> dict:
     """
     사주 4기둥과 오행 분석 결과를 바탕으로 Claude API를 1회 호출해
     종합운(overall)/성격(personality)/직업운(career)/연애운(love)/금전운(money) 해석을 JSON으로 반환.
     """
-    parsed = _call_claude_json(_build_prompt(saju_result, oheng_data), max_tokens=2048)
+    parsed = _call_claude_json(_build_prompt(saju_result, oheng_data, gender), max_tokens=2048)
 
     missing = _INTERPRETATION_FIELDS - parsed.keys()
     if missing:

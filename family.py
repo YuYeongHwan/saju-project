@@ -2,18 +2,32 @@
 # 십신 분석 결과와 사주 기둥 위치를 결합해 전통 명리학의 가족관계 해석(참고용)을 구성하는 모듈
 # ⚠️ 아래 매핑은 전통 명리학 통설을 간략화한 참고용 콘텐츠이며, 단정적 사실이 아님
 
-# 십신별 가족 라벨 (간략화된 전통 통설, 참고용)
-SIPSIN_FAMILY_LABEL = {
+# 십신별 가족 라벨 (간략화된 전통 통설, 참고용). 정재/편재/정관/편관/식신/상관은 성별에 따라 해석이 갈림
+SIPSIN_FAMILY_LABEL_COMMON = {
     "정인": "어머니",
     "편인": "계모/이모",
-    "정관": "배우자(여성 기준)/직장",
-    "편관": "배우자(여성 기준 외)/자녀(남성 기준)",
-    "정재": "아내(남성 기준)/재물",
-    "편재": "아버지/애인",
-    "식신": "자녀(여성 기준)/장모",
-    "상관": "자녀",
     "비견": "형제자매",
     "겁재": "이복형제",
+}
+
+SIPSIN_FAMILY_LABEL_MALE = {
+    **SIPSIN_FAMILY_LABEL_COMMON,
+    "정재": "아내",
+    "편재": "아버지/애인",
+    "정관": "딸",
+    "편관": "아들",
+    "식신": "장모",
+    "상관": "조모",
+}
+
+SIPSIN_FAMILY_LABEL_FEMALE = {
+    **SIPSIN_FAMILY_LABEL_COMMON,
+    "정재": "아버지",
+    "편재": "아버지/시어머니",
+    "정관": "남편",
+    "편관": "애인",
+    "식신": "자녀",
+    "상관": "자녀",
 }
 
 # 기둥 위치별 기본 의미
@@ -32,11 +46,14 @@ PILLAR_LABEL = {
 }
 
 
-def build_family_analysis(saju_result: dict, sipsin_data: dict) -> dict:
+def build_family_analysis(saju_result: dict, sipsin_data: dict, gender: str = "남성") -> dict:
     """
     기둥(연/월/일/시)의 천간·지지 글자마다 십신 + 가족 라벨을 매핑한 구조화 데이터를 반환.
+    정재/편재/정관/편관/식신/상관 라벨은 전통 명리학에서 성별에 따라 달리 해석되므로 gender로 분기.
     일주 천간(일간)은 십신 계산 대상이 아니므로 "본인"으로 표기.
     """
+    label_map = SIPSIN_FAMILY_LABEL_FEMALE if gender == "여성" else SIPSIN_FAMILY_LABEL_MALE
+
     pillars = {}
     for key in ("year_pillar", "month_pillar", "day_pillar", "hour_pillar"):
         cheongan_hanja, jiji_hanja = saju_result[key]["hanja"]
@@ -45,10 +62,10 @@ def build_family_analysis(saju_result: dict, sipsin_data: dict) -> dict:
             cheongan_info = {"hanja": cheongan_hanja, "sipsin": None, "family_label": "본인(일간)"}
         else:
             sipsin = sipsin_data[f"{key}_cheongan"]
-            cheongan_info = {"hanja": cheongan_hanja, "sipsin": sipsin, "family_label": SIPSIN_FAMILY_LABEL[sipsin]}
+            cheongan_info = {"hanja": cheongan_hanja, "sipsin": sipsin, "family_label": label_map[sipsin]}
 
         jiji_sipsin = sipsin_data[f"{key}_jiji"]
-        jiji_info = {"hanja": jiji_hanja, "sipsin": jiji_sipsin, "family_label": SIPSIN_FAMILY_LABEL[jiji_sipsin]}
+        jiji_info = {"hanja": jiji_hanja, "sipsin": jiji_sipsin, "family_label": label_map[jiji_sipsin]}
 
         pillars[key] = {
             "label": PILLAR_LABEL[key],

@@ -2,8 +2,17 @@
 
 from datetime import datetime
 from korean_saju import Saju, load_bundled_data
+from korean_lunar_calendar import KoreanLunarCalendar
 
 _lunar, _solar_terms = load_bundled_data()
+
+
+def convert_lunar_to_solar(year: int, month: int, day: int, is_leap_month: bool = False) -> tuple[int, int, int]:
+    """음력 생년월일(윤달 여부 포함)을 양력 생년월일로 변환"""
+    calendar = KoreanLunarCalendar()
+    if not calendar.setLunarDate(year, month, day, is_leap_month):
+        raise ValueError(f"유효하지 않은 음력 날짜입니다: {year}-{month}-{day} (윤달: {is_leap_month})")
+    return calendar.solarYear, calendar.solarMonth, calendar.solarDay
 
 def calculate_saju(year: int, month: int, day: int, hour: int, minute: int,
                     longitude: float = 126.9784) -> dict:
