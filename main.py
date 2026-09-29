@@ -42,6 +42,7 @@ class SajuRequest(BaseModel):
     day: int = Field(..., ge=1, le=31)
     hour: int = Field(..., ge=0, le=23)
     minute: int = Field(0, ge=0, le=59)
+    name: str = Field(..., min_length=1)
     gender: Literal["남성", "여성"]
     calendar_type: Literal["solar", "lunar"] = "solar"
     is_leap_month: bool = False  # calendar_type이 lunar일 때만 의미 있음
@@ -84,12 +85,13 @@ def get_saju(request: SajuRequest, db: Session = Depends(get_db)):
     sipsin_analysis = analyze_sipsin(result)
     family_analysis = build_family_analysis(result, sipsin_analysis, request.gender)
     try:
-        interpretation = generate_interpretation(result, oheng_analysis, request.gender)
+        interpretation = generate_interpretation(result, oheng_analysis, request.gender, request.name)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"운세 해석 생성에 실패했습니다: {e}")
 
     response = {
         **result,
+        "name": request.name,
         "gender": request.gender,
         "calendar_type": request.calendar_type,
         "birth_city": request.birth_city,
